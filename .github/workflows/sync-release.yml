@@ -1,0 +1,67 @@
+name: Sync release from main repo
+
+on:
+  schedule:
+    - cron: '0 0 * * *' 
+  workflow_dispatch: {}
+
+concurrency:
+  group: sync-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  SOURCE_REPO: yuciss/ningshi
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get latest release from source repo
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          data=$(gh api repos/${SOURCE_REPO}/releases/latest)
+          echo "tag=$(echo "$data" | jq -r .tag_name)" >> "$GITHUB_OUTPUT"
+          echo "name=$(echo "$data" | jq -r .name)" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$(echo "$data" | jq -r .prerelease)" >> "$GITHUB_OUTPUT"
+          echo "$data" | jq -r .body > /tmp/body.md
+
+      - name: Check whether this tag already exists here
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api repos/${{ github.repository }}/releases/tags/${{ steps.latest.outputs.tag }} >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download all assets from the source release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/assets
+          gh release download "${{ steps.latest.outputs.tag }}" \
+            --repo "${SOURCE_REPO}" --dir /tmp/assets
+
+      - name: Create a brand-new release here (never edit an existing one)
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          extra_flag=""
+          if [ "${{ steps.latest.outputs.prerelease }}" = "true" ]; then
+            extra_flag="--prerelease"
+          fi
+          gh release create "${{ steps.latest.outputs.tag }}" \
+            /tmp/assets/* \
+            --repo "${{ github.repository }}" \
+            --title "${{ steps.latest.outputs.name }}" \
+            --notes-file /tmp/body.md \
+            ${extra_flag}
