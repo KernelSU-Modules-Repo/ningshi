@@ -25,3 +25,6 @@ The **+5 / +20** buttons grant a temporary **extension** (capped daily) for when
 
 - KernelSU, arm64 device
 - Kernel with kprobe enabled and the `binder_transaction` symbol in `/proc/kallsyms`
+
+**For full documentation, build instructions, screenshots, and source code, see the main repository:**
+[https://github.com/yuciss/ningshi]
